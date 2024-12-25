@@ -12,4 +12,13 @@ To run:
 bun run index.ts
 ```
 
-This project was created using `bun init` in bun v1.1.38. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+Replace:
+
+ * http-server
+ * webpack-dev-server
+ * http-proxy
+ * caddy
+ * acme
+ * websocket
+ * grpc
+ * graphql

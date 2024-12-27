@@ -2,7 +2,7 @@ import { parseArgs } from "util";
 
 process.title = 'hyperserve';
 
-const { values, positionals } = parseArgs({
+const { values: state, positionals } = parseArgs({
   args: Bun.argv,
   options: {
     port: {
@@ -19,6 +19,11 @@ const { values, positionals } = parseArgs({
       type: 'boolean',
       default: false,
       description: 'Show directory listing',
+    },
+    autoIndex: {
+      type: 'boolean',
+      default: true,
+      description: 'Enable directory listing',
     },
     cors: {
       type: 'boolean',
@@ -60,6 +65,10 @@ const { values, positionals } = parseArgs({
       default: '',
       description: 'Password for basic auth',
     },
+    logpath: {
+      type: 'string',
+      description: 'Log file path',
+    },
     userAgent: {
       type: 'string',
       default: '',
@@ -80,38 +89,40 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
 });
 
-console.log(values);
+console.log(state);
 
-if (values.help) {
+if (state.help) {
     const help = `
     Usage: hyperserve [options]
     Options:
-    --port, -p <port>
-    --baseDir, -b <dir>
-    --showDir, -s
-    --cors, -c
-    --tls, -t
-    --tlsCert, -c <file>
-    --tlsKey, -k <file>
-    --noDotfiles, -d
-    --proxy, -p <url>
-    --username, -u <username>
-    --password, -p <password>
-    --userAgent, -u <userAgent>
-    --help, -h
-    --version, -v
+    --port <port>
+    --baseDir <dir>
+    --showDir
+    --autoIndex
+    --cors
+    --tls
+    --tlsCert <file>
+    --tlsKey <file>
+    --noDotfiles
+    --proxy <url>
+    --username <username>
+    --password <password>
+    --userAgent <userAgent>
+    --logpath <file>
+    --help
+    --version
     `;
   console.log(help);
   process.exit(0);
 }
 
-if (values.version) {
+if (state.version) {
   console.log("0.1.0");
   process.exit(0);
 }
 
 const server = Bun.serve({
-    port: values.port,
+    port: state.port,
     fetch(request) {
       return new Response("Welcome to Bun!");
     },

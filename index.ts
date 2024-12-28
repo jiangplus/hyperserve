@@ -150,7 +150,7 @@ class Hyperserve {
   password: string;
   logpath: string;
   userAgent: string;
-  theServer: Server;
+  server: Server;
 
   constructor(options: typeof state) {
     this.port =
@@ -187,7 +187,7 @@ class Hyperserve {
 
     if (this.wsproxy && req.headers.get("upgrade")?.toLowerCase() === "websocket") {
       const url = new URL(req.url);
-      const upgraded = this.theServer.upgrade(req, {
+      const upgraded = this.server.upgrade(req, {
         data: { pathname: url.pathname },
       });
       if (!upgraded) {
@@ -441,7 +441,7 @@ class Hyperserve {
       };
     }
 
-    let server = this.theServer = Bun.serve(serverOptions);
+    let server = this.server = Bun.serve(serverOptions);
 
     if (this.wsproxy) {
       console.log(`WebSocket proxy enabled to ${self.wsproxy}`);

@@ -2,7 +2,8 @@ import { parseArgs } from "util";
 import path from "path";
 import { join, extname, relative, normalize } from "path";
 import { statSync, readdirSync, readFileSync } from "fs";
-import { ServerWebSocket, Server, type Serve } from "bun";
+import type { ServerWebSocket, Server, Serve } from "bun";
+import { appendFile } from "node:fs/promises";
 
 process.title = "hyperserve";
 
@@ -134,6 +135,21 @@ interface WebSocketData {
   targetWs: WebSocket | null;
 }
 
+interface RequestLog {
+  source: string;
+  time: number;
+  resp_body_size: number;
+  host: string;
+  address: string;
+  request_length: number;
+  method: string;
+  uri: string;
+  status: number;
+  user_agent: string;
+  resp_time: number;
+  upstream_addr: string;
+}
+
 class Hyperserve {
   port: string;
   baseDir: string;
@@ -171,98 +187,159 @@ class Hyperserve {
     this.userAgent = options.userAgent || "";
   }
 
+  private async logRequest(req: Request, response: Response, startTime: number) {
+    const endTime = performance.now();
+    const requestTime = (endTime - startTime) / 1000; // Convert to seconds
+
+    const url = new URL(req.url);
+    const log: RequestLog = {
+      source: "hyperserve",
+      time: Date.now(),
+      resp_body_size: parseInt(response.headers.get("content-length") || "0"),
+      host: req.headers.get("host") || "",
+      address: req.headers.get("x-forwarded-for") || "unknown",
+      request_length: parseInt(req.headers.get("content-length") || "0"),
+      method: req.method,
+      uri: url.pathname + url.search,
+      status: response.status,
+      user_agent: req.headers.get("user-agent") || "",
+      resp_time: requestTime,
+      upstream_addr: this.proxy || "-"
+    };
+
+    const logString = JSON.stringify(log);
+
+    // Always print to stdout
+    console.log(logString);
+
+    // If logpath is specified, also write to file
+    if (this.logpath) {
+      try {
+        // await Bun.write(this.logpath, logString + "\n", { mode: "append" });
+        await appendFile(this.logpath, logString + "\n");
+      } catch (err) {
+        console.error(`Failed to write to log file: ${err}`);
+      }
+    }
+  }
+
   async fetch(req: Request): Promise<Response> {
-    if (this.cors) {
-      if (req.method === 'OPTIONS') {
-        return new Response(null, {
+    const startTime = performance.now();
+    let response: Response;
+
+    try {
+      // Existing CORS preflight check
+      if (this.cors && req.method === 'OPTIONS') {
+        response = new Response(null, {
           headers: {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Max-Age': '86400', // 24 hours
+            'Access-Control-Max-Age': '86400',
           }
         });
+        await this.logRequest(req, response, startTime);
+        return response;
       }
-    }
 
-    if (this.wsproxy && req.headers.get("upgrade")?.toLowerCase() === "websocket") {
-      const url = new URL(req.url);
-      const upgraded = this.server.upgrade(req, {
-        data: { pathname: url.pathname },
-      });
-      if (!upgraded) {
-        return new Response('WebSocket upgrade failed', { status: 400 });
-      }
-      return new Response(null, { status: 101 });
-    }
-
-    if (this.username && this.password) {
-      const authHeader = req.headers.get("Authorization");
-      if (!authHeader || !this.isValidBasicAuth(authHeader)) {
-        return new Response("Unauthorized", {
-          status: 401,
-          headers: {
-            "WWW-Authenticate": 'Basic realm="Authentication required"',
-          },
+      if (this.wsproxy && req.headers.get("upgrade")?.toLowerCase() === "websocket") {
+        const url = new URL(req.url);
+        const upgraded = this.server.upgrade(req, {
+          data: { pathname: url.pathname },
         });
+        if (!upgraded) {
+          return new Response('WebSocket upgrade failed', { status: 400 });
+        }
+        return new Response(null, { status: 101 });
       }
-    }
 
-    const url = new URL(req.url);
-    const pathname = decodeURIComponent(url.pathname);
-    const baseDir = this.baseDir;
-    let filePath = normalize(path.join(baseDir, pathname));
+      if (this.username && this.password) {
+        const authHeader = req.headers.get("Authorization");
+        if (!authHeader || !this.isValidBasicAuth(authHeader)) {
+          return new Response("Unauthorized", {
+            status: 401,
+            headers: {
+              "WWW-Authenticate": 'Basic realm="Authentication required"',
+            },
+          });
+        }
+      }
 
-    try {
+      const url = new URL(req.url);
+      const pathname = decodeURIComponent(url.pathname);
+      const baseDir = this.baseDir;
+      let filePath = normalize(path.join(baseDir, pathname));
+
       let stat = statSync(filePath);
 
       if (stat.isDirectory()) {
         if (this.showDir) {
           let response = await this.serveDirectoryIndex(filePath, pathname);
+          await this.logRequest(req, response, startTime);
           return this.addCorsHeaders(response);
         } else if (this.autoIndex) {
           filePath = path.join(filePath, "index.html");
           if (statSync(filePath).isFile()) {
-            return this.addCorsHeaders(new Response(Bun.file(filePath)));
+            response = this.addCorsHeaders(new Response(Bun.file(filePath)));
+            await this.logRequest(req, response, startTime);
+            return response;
           } else if (this.proxy) {
-            return this.addCorsHeaders(await this.handleProxy(req, this.proxy));
+            response = this.addCorsHeaders(await this.handleProxy(req, this.proxy));
+            await this.logRequest(req, response, startTime);
+            return response;
           } else {
-            return this.addCorsHeaders(new Response("index.html not found", { status: 404 }));
+            response = this.addCorsHeaders(new Response("index.html not found", { status: 404 }));
+            await this.logRequest(req, response, startTime);
+            return response;
           }
         } else {
-          return this.addCorsHeaders(new Response("Directory listing not allowed", { status: 403 }));
+          response = this.addCorsHeaders(new Response("Directory listing not allowed", { status: 403 }));
+          await this.logRequest(req, response, startTime);
+          return response;
         }
       }
 
       if (stat.isFile()) {
         const file = Bun.file(filePath);
         const mimeType = file.type || "application/octet-stream";
-        return this.addCorsHeaders(new Response(file, {
+        response = this.addCorsHeaders(new Response(file, {
           headers: {
             "Content-Type": mimeType,
             "Content-Length": String(stat.size),
             "Last-Modified": stat.mtime.toUTCString(),
           },
         }));
+        await this.logRequest(req, response, startTime);
+        return response;
       }
 
       // If we get here, try proxy if enabled
       if (this.proxy) {
-        return this.addCorsHeaders(await this.handleProxy(req, this.proxy));
+        response = this.addCorsHeaders(await this.handleProxy(req, this.proxy));
+        await this.logRequest(req, response, startTime);
+        return response;
       }
 
-      return this.addCorsHeaders(new Response("Not Found", { status: 404 }));
+      response = this.addCorsHeaders(new Response("Not Found", { status: 404 }));
+      await this.logRequest(req, response, startTime);
+      return response;
     } catch (err) {
       // File not found or access denied, try proxy if enabled
       if (this.proxy) {
         try {
-          return this.addCorsHeaders(await this.handleProxy(req, this.proxy));
+          response = this.addCorsHeaders(await this.handleProxy(req, this.proxy));
+          await this.logRequest(req, response, startTime);
+          return response;
         } catch (proxyErr) {
           console.error("Proxy request failed:", proxyErr);
-          return this.addCorsHeaders(new Response("Not Found", { status: 404 }));
+          response = this.addCorsHeaders(new Response("Not Found", { status: 404 }));
+          await this.logRequest(req, response, startTime);
+          return response;
         }
       }
-      return this.addCorsHeaders(new Response("Not Found", { status: 404 }));
+      response = this.addCorsHeaders(new Response("Not Found", { status: 404 }));
+      await this.logRequest(req, response, startTime);
+      return response;
     }
   }
 

@@ -58,6 +58,11 @@ const { values: state, positionals } = parseArgs({
       default: "",
       description: "Fallback proxy to the given URL",
     },
+    wsproxy: {
+      type: "string",
+      default: "",
+      description: "WebSocket proxy to the given URL",
+    },
     username: {
       type: "string",
       default: "",
@@ -108,6 +113,7 @@ if (state.help) {
     --tlsKey <file>
     --noDotfiles
     --proxy <url>
+    --wsproxy <url>
     --username <username>
     --password <password>
     --userAgent <userAgent>
@@ -135,6 +141,7 @@ class Hyperserve {
   tlsKey: string;
   noDotfiles: boolean;
   proxy: string;
+  wsproxy: string;
   username: string;
   password: string;
   logpath: string;
@@ -152,6 +159,7 @@ class Hyperserve {
     this.tlsKey = options.tlsKey || "";
     this.noDotfiles = options.noDotfiles || false;
     this.proxy = options.proxy || "";
+    this.wsproxy = options.wsproxy || "";
     this.username = options.username || "";
     this.password = options.password || "";
     this.logpath = options.logpath || "";
@@ -249,6 +257,10 @@ class Hyperserve {
     // Create new headers object to modify the host and user agent
     const headers = new Headers(req.headers);
     headers.set("host", targetUrl.host);
+
+    // Set X-Forwarded-For header
+    const clientIP = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+    headers.set("x-forwarded-for", clientIP);
 
     // Set User-Agent if specified, or copy from original request if it's a curl request
     if (this.userAgent) {

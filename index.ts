@@ -196,6 +196,8 @@ class Hyperserve {
             }
           });
         }
+
+        return new Response("Not Found", { status: 404 });
       } catch (err) {
         // File not found or access denied
         return new Response("Not Found", { status: 404 });

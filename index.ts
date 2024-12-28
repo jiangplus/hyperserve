@@ -94,6 +94,11 @@ const { values: state, positionals } = parseArgs({
       default: false,
       description: "Show version",
     },
+    host: {
+      type: "string",
+      default: "",
+      description: "Only allow access from this host domain",
+    },
   },
   strict: true,
   allowPositionals: true,
@@ -120,6 +125,7 @@ if (state.help) {
     --logpath <file>
     --help
     --version
+    --host <domain>
     `;
   console.log(help);
   process.exit(0);
@@ -167,6 +173,7 @@ class Hyperserve {
   logpath: string;
   userAgent: string;
   server: Server;
+  host: string;
 
   constructor(options: typeof state) {
     this.port =
@@ -185,6 +192,7 @@ class Hyperserve {
     this.password = options.password || "";
     this.logpath = options.logpath || "";
     this.userAgent = options.userAgent || "";
+    this.host = options.host || "";
   }
 
   private async logRequest(req: Request, response: Response, startTime: number) {
@@ -228,6 +236,15 @@ class Hyperserve {
     let response: Response;
 
     try {
+      if (this.host) {
+        const reqHost = req.headers.get("host")?.split(":")[0];
+        if (reqHost !== this.host) {
+          response = new Response("Forbidden - Invalid Host", { status: 403 });
+          await this.logRequest(req, response, startTime);
+          return response;
+        }
+      }
+
       // Existing CORS preflight check
       if (this.cors && req.method === 'OPTIONS') {
         response = new Response(null, {

@@ -233,15 +233,24 @@ class Hyperserve {
 
   async handleProxy(req: Request, target: string): Promise<Response> {
     const url = new URL(req.url);
-    const proxyUrl = new URL(url.pathname + url.search, target);
-    console.log({ proxyUrl, target, url: url.pathname + url.search });
-    console.log(proxyUrl.toString());
+    const targetUrl = new URL(target);
+
+    // Combine target pathname with request pathname
+    const proxyPathname = join(targetUrl.pathname, url.pathname);
+    targetUrl.pathname = proxyPathname;
+    targetUrl.search = url.search;
+
+    console.log({
+      targetUrl: targetUrl.toString(),
+      target,
+      url: url.pathname + url.search,
+    });
 
     // Create new headers object to modify the host
     const headers = new Headers(req.headers);
-    headers.set("host", proxyUrl.host);
+    headers.set("host", targetUrl.host);
 
-    const proxyReq = new Request(proxyUrl, {
+    const proxyReq = new Request(targetUrl, {
       method: req.method,
       headers: headers,
       body: req.body,
@@ -251,9 +260,6 @@ class Hyperserve {
       const response = await fetch(proxyReq);
       return response;
     } catch (err) {
-      console.log("err");
-      console.log(err);
-      console.log(proxyReq);
       return new Response("Proxy Error", { status: 502 });
     }
   }

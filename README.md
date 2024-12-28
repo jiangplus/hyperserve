@@ -14,11 +14,11 @@ bun run index.ts
 
 Replace:
 
- * http-server
- * webpack-dev-server
- * http-proxy
- * caddy
- * acme
- * websocket
- * grpc
- * graphql
+- http-server
+- webpack-dev-server
+- http-proxy
+- caddy
+- acme
+- websocket
+- grpc
+- graphql

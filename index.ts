@@ -3,89 +3,89 @@ import path from "path";
 import { join, extname, relative, normalize } from "path";
 import { statSync, readdirSync } from "fs";
 
-process.title = 'hyperserve';
+process.title = "hyperserve";
 
 const { values: state, positionals } = parseArgs({
   args: Bun.argv,
   options: {
     port: {
-      type: 'string',
-      default: '3000',
-      description: 'Port to listen on',
+      type: "string",
+      default: "3000",
+      description: "Port to listen on",
     },
     baseDir: {
-      type: 'string',
-      default: '.',
-      description: 'Base directory to serve files from',
+      type: "string",
+      default: ".",
+      description: "Base directory to serve files from",
     },
     showDir: {
-      type: 'boolean',
+      type: "boolean",
       default: false,
-      description: 'Show directory listing',
+      description: "Show directory listing",
     },
     autoIndex: {
-      type: 'boolean',
+      type: "boolean",
       default: true,
-      description: 'Enable directory listing',
+      description: "Enable directory listing",
     },
     cors: {
-      type: 'boolean',
+      type: "boolean",
       default: false,
-      description: 'Enable CORS',
+      description: "Enable CORS",
     },
     tls: {
-      type: 'boolean',
+      type: "boolean",
       default: false,
-      description: 'Enable TLS',
+      description: "Enable TLS",
     },
     tlsCert: {
-      type: 'string',
-      default: '',
-      description: 'TLS certificate file',
+      type: "string",
+      default: "",
+      description: "TLS certificate file",
     },
     tlsKey: {
-      type: 'string',
-      default: '',
-      description: 'TLS key file',
+      type: "string",
+      default: "",
+      description: "TLS key file",
     },
     noDotfiles: {
-      type: 'boolean',
+      type: "boolean",
       default: false,
-      description: 'Do not serve dotfiles',
+      description: "Do not serve dotfiles",
     },
     proxy: {
-      type: 'string',
-      default: '',
-      description: 'Fallback proxy to the given URL',
+      type: "string",
+      default: "",
+      description: "Fallback proxy to the given URL",
     },
     username: {
-      type: 'string',
-      default: '',
-      description: 'Username for basic auth',
+      type: "string",
+      default: "",
+      description: "Username for basic auth",
     },
     password: {
-      type: 'string',
-      default: '',
-      description: 'Password for basic auth',
+      type: "string",
+      default: "",
+      description: "Password for basic auth",
     },
     logpath: {
-      type: 'string',
-      description: 'Log file path',
+      type: "string",
+      description: "Log file path",
     },
     userAgent: {
-      type: 'string',
-      default: '',
-      description: 'User agent to use for requests',
+      type: "string",
+      default: "",
+      description: "User agent to use for requests",
     },
     help: {
-      type: 'boolean',
+      type: "boolean",
       default: false,
-      description: 'Show help',
+      description: "Show help",
     },
     version: {
-      type: 'boolean',
+      type: "boolean",
       default: false,
-      description: 'Show version',
+      description: "Show version",
     },
   },
   strict: true,
@@ -95,7 +95,7 @@ const { values: state, positionals } = parseArgs({
 console.log(state);
 
 if (state.help) {
-    const help = `
+  const help = `
     Usage: hyperserve [options]
     Options:
     --port <port>
@@ -125,90 +125,91 @@ if (state.version) {
 }
 
 class Hyperserve {
-    port: string;
-    baseDir: string;
-    showDir: boolean;
-    autoIndex: boolean;
-    cors: boolean;
-    tls: boolean;
-    tlsCert: string;
-    tlsKey: string;
-    noDotfiles: boolean;
-    proxy: string;
-    username: string;
-    password: string;
-    logpath: string;
-    userAgent: string;
+  port: string;
+  baseDir: string;
+  showDir: boolean;
+  autoIndex: boolean;
+  cors: boolean;
+  tls: boolean;
+  tlsCert: string;
+  tlsKey: string;
+  noDotfiles: boolean;
+  proxy: string;
+  username: string;
+  password: string;
+  logpath: string;
+  userAgent: string;
 
-    constructor(options: typeof state) {
-        this.port = options.port || '3000';
-        this.baseDir = options.baseDir || '.';
-        this.showDir = options.showDir || false;
-        this.autoIndex = options.autoIndex || true;
-        this.cors = options.cors || false;
-        this.tls = options.tls || false;
-        this.tlsCert = options.tlsCert || '';
-        this.tlsKey = options.tlsKey || '';
-        this.noDotfiles = options.noDotfiles || false;
-        this.proxy = options.proxy || '';
-        this.username = options.username || '';
-        this.password = options.password || '';
-        this.logpath = options.logpath || '';
-        this.userAgent = options.userAgent || '';
-    }
+  constructor(options: typeof state) {
+    this.port = options.port || "3000";
+    this.baseDir = options.baseDir || ".";
+    this.showDir = options.showDir || false;
+    this.autoIndex = options.autoIndex || true;
+    this.cors = options.cors || false;
+    this.tls = options.tls || false;
+    this.tlsCert = options.tlsCert || "";
+    this.tlsKey = options.tlsKey || "";
+    this.noDotfiles = options.noDotfiles || false;
+    this.proxy = options.proxy || "";
+    this.username = options.username || "";
+    this.password = options.password || "";
+    this.logpath = options.logpath || "";
+    this.userAgent = options.userAgent || "";
+  }
 
-    async fetch(req: Request): Promise<Response> {
-        const url = new URL(req.url);
-        const pathname = decodeURIComponent(url.pathname);;
-        const baseDir = this.baseDir;
-        console.log(pathname);
-        console.log(baseDir);
-        let filePath = normalize(path.join(baseDir, pathname));
-        console.log({filePath});
+  async fetch(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+    const pathname = decodeURIComponent(url.pathname);
+    const baseDir = this.baseDir;
+    console.log(pathname);
+    console.log(baseDir);
+    let filePath = normalize(path.join(baseDir, pathname));
+    console.log({ filePath });
 
+    try {
+      let stat = statSync(filePath);
 
-      try {
-        let stat = statSync(filePath);
-
-        if (stat.isDirectory()) {
-            if(this.showDir) {
-              return this.serveDirectoryIndex(filePath, pathname);
-            } else if (this.autoIndex) {
-                filePath = path.join(filePath, 'index.html');
-                if(statSync(filePath).isFile()) {
-                  return new Response(Bun.file(filePath));
-                } else {
-                  return new Response("index.html not found", { status: 404 });
-                }
-              } else {
-              return new Response("Directory listing not allowed", { status: 403 });
-            }
+      if (stat.isDirectory()) {
+        if (this.showDir) {
+          return this.serveDirectoryIndex(filePath, pathname);
+        } else if (this.autoIndex) {
+          filePath = path.join(filePath, "index.html");
+          if (statSync(filePath).isFile()) {
+            return new Response(Bun.file(filePath));
+          } else {
+            return new Response("index.html not found", { status: 404 });
+          }
+        } else {
+          return new Response("Directory listing not allowed", { status: 403 });
         }
-
-        if (stat.isFile()) {
-          const file = Bun.file(filePath);
-          const mimeType = file.type || "application/octet-stream";
-          return new Response(file, {
-            headers: {
-              "Content-Type": mimeType,
-              "Content-Length": String(stat.size),
-              "Last-Modified": stat.mtime.toUTCString()
-            }
-          });
-        }
-
-        return new Response("Not Found", { status: 404 });
-      } catch (err) {
-        // File not found or access denied
-        return new Response("Not Found", { status: 404 });
       }
+
+      if (stat.isFile()) {
+        const file = Bun.file(filePath);
+        const mimeType = file.type || "application/octet-stream";
+        return new Response(file, {
+          headers: {
+            "Content-Type": mimeType,
+            "Content-Length": String(stat.size),
+            "Last-Modified": stat.mtime.toUTCString(),
+          },
+        });
+      }
+
+      return new Response("Not Found", { status: 404 });
+    } catch (err) {
+      // File not found or access denied
+      return new Response("Not Found", { status: 404 });
     }
+  }
 
-
-  async serveDirectoryIndex(dirPath: string, urlPath: string): Promise<Response> {
+  async serveDirectoryIndex(
+    dirPath: string,
+    urlPath: string,
+  ): Promise<Response> {
     try {
       const files = readdirSync(dirPath);
-      const items = files.map(file => {
+      const items = files.map((file) => {
         const fullPath = join(dirPath, file);
         const stat = statSync(fullPath);
         const isDir = stat.isDirectory();
@@ -219,7 +220,7 @@ class Hyperserve {
           name: file,
           isDirectory: isDir,
           size,
-          mtime
+          mtime,
         };
       });
 
@@ -245,54 +246,56 @@ class Hyperserve {
                 <th>Size</th>
                 <th>Last Modified</th>
               </tr>
-              ${items.map(item => `
+              ${items
+                .map(
+                  (item) => `
                 <tr>
                   <td>
-                    <a href="${join(urlPath, item.name)}${item.isDirectory ? '/' : ''}">
-                      ${item.name}${item.isDirectory ? '/' : ''}
+                    <a href="${join(urlPath, item.name)}${item.isDirectory ? "/" : ""}">
+                      ${item.name}${item.isDirectory ? "/" : ""}
                     </a>
                   </td>
-                  <td>${item.isDirectory ? '-' : formatSize(item.size)}</td>
+                  <td>${item.isDirectory ? "-" : formatSize(item.size)}</td>
                   <td>${item.mtime.toUTCString()}</td>
                 </tr>
-              `).join('')}
+              `,
+                )
+                .join("")}
             </table>
           </body>
         </html>
       `;
 
       return new Response(html, {
-        headers: { "Content-Type": "text/html" }
+        headers: { "Content-Type": "text/html" },
       });
     } catch (err) {
       return new Response("Error reading directory", { status: 500 });
     }
   }
 
-    async start() {
-        const server = Bun.serve({
-            port: Number(this.port),
-            fetch: this.fetch.bind(this),
-        });
-        console.log(`Listening on localhost:${server.port}`);
-    }
+  async start() {
+    const server = Bun.serve({
+      port: Number(this.port),
+      fetch: this.fetch.bind(this),
+    });
+    console.log(`Listening on localhost:${server.port}`);
+  }
 }
-
 
 // Utility function to format file sizes
 function formatSize(bytes: number): string {
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let size = bytes;
-    let unitIndex = 0;
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = bytes;
+  let unitIndex = 0;
 
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
-
-    return `${size.toFixed(1)} ${units[unitIndex]}`;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
   }
 
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
+}
 
 const hyperserve = new Hyperserve(state);
 hyperserve.start();

@@ -98,8 +98,6 @@ const { values: state, positionals } = parseArgs({
   allowPositionals: true,
 });
 
-console.log(state);
-
 if (state.help) {
   const help = `
     Usage: hyperserve [options]
@@ -213,10 +211,7 @@ class Hyperserve {
     const url = new URL(req.url);
     const pathname = decodeURIComponent(url.pathname);
     const baseDir = this.baseDir;
-    console.log(pathname);
-    console.log(baseDir);
     let filePath = normalize(path.join(baseDir, pathname));
-    console.log({ filePath });
 
     try {
       let stat = statSync(filePath);
@@ -279,12 +274,6 @@ class Hyperserve {
     const proxyPathname = join(targetUrl.pathname, url.pathname);
     targetUrl.pathname = proxyPathname;
     targetUrl.search = url.search;
-
-    console.log({
-      targetUrl: targetUrl.toString(),
-      target,
-      url: url.pathname + url.search,
-    });
 
     // Create new headers object to modify the host and user agent
     const headers = new Headers(req.headers);

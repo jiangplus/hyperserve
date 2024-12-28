@@ -1,4 +1,5 @@
 import { parseArgs } from "util";
+import path from "path";
 
 process.title = 'hyperserve';
 
@@ -122,9 +123,19 @@ if (state.version) {
 }
 
 const server = Bun.serve({
-    port: state.port,
-    fetch(request) {
-      return new Response("Welcome to Bun!");
+    port: Number(state.port || 3000),
+    fetch(req: Request) {
+        const url = new URL(req.url);
+        const pathname = url.pathname;
+        const baseDir = state.baseDir || '.';
+        const filePath = path.join(baseDir, pathname);
+        let file;
+        if (filePath.endsWith('/') && state.autoIndex) {
+            file = Bun.file(path.join(filePath, 'index.html'));
+        } else {
+            file = Bun.file(filePath);
+        }
+        return new Response(file);
     },
   });
 

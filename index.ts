@@ -141,7 +141,7 @@ class Hyperserve {
   userAgent: string;
 
   constructor(options: typeof state) {
-    this.port = options.port || "3000";
+    this.port = options.port || process.env.PORT || process.env.NODE_PORT || "3000";
     this.baseDir = options.baseDir || ".";
     this.showDir = options.showDir || false;
     this.autoIndex = options.autoIndex || true;
@@ -158,6 +158,18 @@ class Hyperserve {
   }
 
   async fetch(req: Request): Promise<Response> {
+    if (this.username && this.password) {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader || !this.isValidBasicAuth(authHeader)) {
+        return new Response('Unauthorized', {
+          status: 401,
+          headers: {
+            'WWW-Authenticate': 'Basic realm="Authentication required"'
+          }
+        });
+      }
+    }
+
     const url = new URL(req.url);
     const pathname = decodeURIComponent(url.pathname);
     const baseDir = this.baseDir;
@@ -209,20 +221,23 @@ class Hyperserve {
   ): Promise<Response> {
     try {
       const files = readdirSync(dirPath);
-      const items = files.map((file) => {
-        const fullPath = join(dirPath, file);
-        const stat = statSync(fullPath);
-        const isDir = stat.isDirectory();
-        const size = stat.size;
-        const mtime = stat.mtime;
+      const items = files
+        // Filter out dotfiles if noDotfiles option is set
+        .filter(file => !this.noDotfiles || !file.startsWith('.'))
+        .map((file) => {
+          const fullPath = join(dirPath, file);
+          const stat = statSync(fullPath);
+          const isDir = stat.isDirectory();
+          const size = stat.size;
+          const mtime = stat.mtime;
 
-        return {
-          name: file,
-          isDirectory: isDir,
-          size,
-          mtime,
-        };
-      });
+          return {
+            name: file,
+            isDirectory: isDir,
+            size,
+            mtime,
+          };
+        });
 
       // Generate HTML for directory listing
       const html = `
@@ -280,6 +295,14 @@ class Hyperserve {
       fetch: this.fetch.bind(this),
     });
     console.log(`Listening on localhost:${server.port}`);
+  }
+
+  private isValidBasicAuth(authHeader: string): boolean {
+    const base64Credentials = authHeader.split(' ')[1] || '';
+    const credentials = atob(base64Credentials);
+    const [username, password] = credentials.split(':');
+
+    return username === this.username && password === this.password;
   }
 }
 

@@ -188,6 +188,8 @@ class Hyperserve {
           filePath = path.join(filePath, "index.html");
           if (statSync(filePath).isFile()) {
             return new Response(Bun.file(filePath));
+          } else if (this.proxy) {
+            return await this.handleProxy(req, this.proxy);
           } else {
             return new Response("index.html not found", { status: 404 });
           }
@@ -208,10 +210,51 @@ class Hyperserve {
         });
       }
 
+      // If we get here, try proxy if enabled
+      if (this.proxy) {
+        return await this.handleProxy(req, this.proxy);
+      }
+
       return new Response("Not Found", { status: 404 });
     } catch (err) {
-      // File not found or access denied
+      // File not found or access denied, try proxy if enabled
+      if (this.proxy) {
+        try {
+          return await this.handleProxy(req, this.proxy);
+        } catch (proxyErr) {
+          console.error('Proxy request failed:', proxyErr);
+          return new Response("Not Found", { status: 404 });
+        }
+      }
       return new Response("Not Found", { status: 404 });
+    }
+  }
+
+
+   async handleProxy(req: Request, target: string): Promise<Response> {
+    const url = new URL(req.url);
+    const proxyUrl = new URL(url.pathname + url.search, target);
+    console.log({ proxyUrl, target, url: url.pathname + url.search });
+    console.log(proxyUrl.toString());
+
+    // Create new headers object to modify the host
+    const headers = new Headers(req.headers);
+    headers.set('host', proxyUrl.host);
+
+    const proxyReq = new Request(proxyUrl, {
+      method: req.method,
+      headers: headers,
+      body: req.body
+    });
+
+    try {
+      const response = await fetch(proxyReq);
+      return response;
+    } catch (err) {
+      console.log("err");
+      console.log(err);
+      console.log(proxyReq);
+      return new Response("Proxy Error", { status: 502 });
     }
   }
 

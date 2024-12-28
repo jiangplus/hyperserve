@@ -2,6 +2,7 @@ import { parseArgs } from "util";
 import path from "path";
 import { join, extname, relative, normalize } from "path";
 import { statSync, readdirSync } from "fs";
+import { ServerWebSocket, Server } from "bun";
 
 process.title = "hyperserve";
 
@@ -130,6 +131,11 @@ if (state.version) {
   process.exit(0);
 }
 
+interface WebSocketData {
+  pathname: string;
+  targetWs: WebSocket | null;
+}
+
 class Hyperserve {
   port: string;
   baseDir: string;
@@ -146,6 +152,7 @@ class Hyperserve {
   password: string;
   logpath: string;
   userAgent: string;
+  theServer: Server;
 
   constructor(options: typeof state) {
     this.port =
@@ -167,6 +174,17 @@ class Hyperserve {
   }
 
   async fetch(req: Request): Promise<Response> {
+    if (
+      this.wsproxy &&
+      req.headers.get("upgrade")?.toLowerCase() === "websocket"
+    ) {
+      const url = new URL(req.url);
+      const upgraded = this.theServer.upgrade(req, {
+        data: { pathname: url.pathname },
+      });
+      return upgraded;
+    }
+
     if (this.username && this.password) {
       const authHeader = req.headers.get("Authorization");
       if (!authHeader || !this.isValidBasicAuth(authHeader)) {
@@ -259,7 +277,10 @@ class Hyperserve {
     headers.set("host", targetUrl.host);
 
     // Set X-Forwarded-For header
-    const clientIP = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+    const clientIP =
+      req.headers.get("x-forwarded-for") ||
+      req.headers.get("x-real-ip") ||
+      "unknown";
     headers.set("x-forwarded-for", clientIP);
 
     // Set User-Agent if specified, or copy from original request if it's a curl request
@@ -356,11 +377,53 @@ class Hyperserve {
   }
 
   async start() {
-    const server = Bun.serve({
+    let hserver = this;
+    this.theServer = Bun.serve({
       port: Number(this.port),
+
       fetch: this.fetch.bind(this),
+      websocket: this.wsproxy
+        ? {
+            message(ws: ServerWebSocket<WebSocketData>, message) {
+              ws.data.targetWs?.send(message);
+            },
+            open(ws: ServerWebSocket<WebSocketData>) {
+              try {
+                // Create WebSocket connection to target
+                const targetWs = new WebSocket(
+                  hserver.wsproxy + ws.data.pathname,
+                );
+                ws.data.targetWs = targetWs;
+
+                // Forward target messages back to client
+                targetWs.addEventListener("message", (event) => {
+                  ws.send(event.data);
+                });
+
+                // Handle target connection close
+                targetWs.addEventListener("close", () => {
+                  ws.close();
+                });
+              } catch (err) {
+                console.error("WebSocket proxy connection failed:", err);
+                ws.close();
+              }
+            },
+            close(ws: ServerWebSocket<WebSocketData>) {
+              ws.data.targetWs?.close();
+            },
+            data: {
+              pathname: "",
+              targetWs: null,
+            },
+          }
+        : undefined,
     });
-    console.log(`Listening on localhost:${server.port}`);
+
+    if (this.wsproxy) {
+      console.log(`WebSocket proxy enabled to ${hserver.wsproxy}`);
+    }
+    console.log(`Listening on localhost:${hserver.theServer.port}`);
   }
 
   private isValidBasicAuth(authHeader: string): boolean {

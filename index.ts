@@ -1,8 +1,8 @@
 import { parseArgs } from "util";
 import path from "path";
 import { join, extname, relative, normalize } from "path";
-import { statSync, readdirSync } from "fs";
-import { ServerWebSocket, Server } from "bun";
+import { statSync, readdirSync, readFileSync } from "fs";
+import { ServerWebSocket, Server, type Serve } from "bun";
 
 process.title = "hyperserve";
 
@@ -378,52 +378,74 @@ class Hyperserve {
 
   async start() {
     let hserver = this;
-    this.theServer = Bun.serve({
+
+    // Add TLS configuration if enabled
+    const serverOptions: Serve = {
       port: Number(this.port),
-
       fetch: this.fetch.bind(this),
-      websocket: this.wsproxy
-        ? {
-            message(ws: ServerWebSocket<WebSocketData>, message) {
-              ws.data.targetWs?.send(message);
-            },
-            open(ws: ServerWebSocket<WebSocketData>) {
-              try {
-                // Create WebSocket connection to target
-                const targetWs = new WebSocket(
-                  hserver.wsproxy + ws.data.pathname,
-                );
-                ws.data.targetWs = targetWs;
+    };
 
-                // Forward target messages back to client
-                targetWs.addEventListener("message", (event) => {
-                  ws.send(event.data);
-                });
+    if (this.tls) {
+      if (!this.tlsCert || !this.tlsKey) {
+        throw new Error("TLS enabled but certificate or key file not provided");
+      }
 
-                // Handle target connection close
-                targetWs.addEventListener("close", () => {
-                  ws.close();
-                });
-              } catch (err) {
-                console.error("WebSocket proxy connection failed:", err);
-                ws.close();
-              }
-            },
-            close(ws: ServerWebSocket<WebSocketData>) {
-              ws.data.targetWs?.close();
-            },
-            data: {
-              pathname: "",
-              targetWs: null,
-            },
+      try {
+        serverOptions.tls = {
+          cert: readFileSync(this.tlsCert),
+          key: readFileSync(this.tlsKey),
+        };
+      } catch (err) {
+        throw new Error(
+          `Failed to read TLS certificate or key: ${err.message}`,
+        );
+      }
+    }
+
+    // Add websocket configuration if enabled
+    if (this.wsproxy) {
+      serverOptions.websocket = {
+        message(ws: ServerWebSocket<WebSocketData>, message) {
+          ws.data.targetWs?.send(message);
+        },
+        open(ws: ServerWebSocket<WebSocketData>) {
+          try {
+            // Create WebSocket connection to target
+            const targetWs = new WebSocket(hserver.wsproxy + ws.data.pathname);
+            ws.data.targetWs = targetWs;
+
+            // Forward target messages back to client
+            targetWs.addEventListener("message", (event) => {
+              ws.send(event.data);
+            });
+
+            // Handle target connection close
+            targetWs.addEventListener("close", () => {
+              ws.close();
+            });
+          } catch (err) {
+            console.error("WebSocket proxy connection failed:", err);
+            ws.close();
           }
-        : undefined,
-    });
+        },
+        close(ws: ServerWebSocket<WebSocketData>) {
+          ws.data.targetWs?.close();
+        },
+        data: {
+          pathname: "",
+          targetWs: null,
+        },
+      };
+    }
+
+    this.theServer = Bun.serve(serverOptions);
 
     if (this.wsproxy) {
       console.log(`WebSocket proxy enabled to ${hserver.wsproxy}`);
     }
-    console.log(`Listening on localhost:${hserver.theServer.port}`);
+    console.log(
+      `Listening on ${this.tls ? "https" : "http"}://localhost:${hserver.theServer.port}`,
+    );
   }
 
   private isValidBasicAuth(authHeader: string): boolean {

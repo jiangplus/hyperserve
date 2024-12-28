@@ -157,24 +157,32 @@ class Hyperserve {
         this.userAgent = options.userAgent || '';
     }
 
-    async fetch(req: Request) {
+    async fetch(req: Request): Promise<Response> {
         const url = new URL(req.url);
         const pathname = decodeURIComponent(url.pathname);;
         const baseDir = this.baseDir;
         console.log(pathname);
         console.log(baseDir);
-        const filePath = normalize(path.join(baseDir, pathname));
+        let filePath = normalize(path.join(baseDir, pathname));
         console.log({filePath});
 
 
       try {
-        const stat = statSync(filePath);
+        let stat = statSync(filePath);
 
         if (stat.isDirectory()) {
-          if (this.autoIndex) {
-            return this.serveDirectoryIndex(filePath, pathname);
-          }
-          return new Response("Directory listing not allowed", { status: 403 });
+            if(this.showDir) {
+              return this.serveDirectoryIndex(filePath, pathname);
+            } else if (this.autoIndex) {
+                filePath = path.join(filePath, 'index.html');
+                if(statSync(filePath).isFile()) {
+                  return new Response(Bun.file(filePath));
+                } else {
+                  return new Response("index.html not found", { status: 404 });
+                }
+              } else {
+              return new Response("Directory listing not allowed", { status: 403 });
+            }
         }
 
         if (stat.isFile()) {
@@ -192,18 +200,6 @@ class Hyperserve {
         // File not found or access denied
         return new Response("Not Found", { status: 404 });
       }
-
-        // let file;
-        // if (filePath.endsWith('/')) {
-        //     if (this.autoIndex) {
-        //         file = Bun.file(path.join(filePath, 'index.html'));
-        //     } else if(this.showDir) {
-
-        //     }
-        // } else {
-        //     file = Bun.file(filePath);
-        // }
-        // return new Response(file);
     }
 
 

@@ -1,5 +1,7 @@
 import { parseArgs } from "util";
 import path from "path";
+import { join, extname, relative, normalize } from "path";
+import { statSync, readdirSync } from "fs";
 
 process.title = 'hyperserve';
 
@@ -157,19 +159,117 @@ class Hyperserve {
 
     async fetch(req: Request) {
         const url = new URL(req.url);
-        const pathname = url.pathname;
+        const pathname = decodeURIComponent(url.pathname);;
         const baseDir = this.baseDir;
         console.log(pathname);
         console.log(baseDir);
-        const filePath = path.join(baseDir, pathname);
-        let file;
-        if (filePath.endsWith('/') && this.autoIndex) {
-            file = Bun.file(path.join(filePath, 'index.html'));
-        } else {
-            file = Bun.file(filePath);
+        const filePath = normalize(path.join(baseDir, pathname));
+        console.log({filePath});
+
+
+      try {
+        const stat = statSync(filePath);
+
+        if (stat.isDirectory()) {
+          if (this.autoIndex) {
+            return this.serveDirectoryIndex(filePath, pathname);
+          }
+          return new Response("Directory listing not allowed", { status: 403 });
         }
-        return new Response(file);
+
+        if (stat.isFile()) {
+          const file = Bun.file(filePath);
+          const mimeType = file.type || "application/octet-stream";
+          return new Response(file, {
+            headers: {
+              "Content-Type": mimeType,
+              "Content-Length": String(stat.size),
+              "Last-Modified": stat.mtime.toUTCString()
+            }
+          });
+        }
+      } catch (err) {
+        // File not found or access denied
+        return new Response("Not Found", { status: 404 });
+      }
+
+        // let file;
+        // if (filePath.endsWith('/')) {
+        //     if (this.autoIndex) {
+        //         file = Bun.file(path.join(filePath, 'index.html'));
+        //     } else if(this.showDir) {
+
+        //     }
+        // } else {
+        //     file = Bun.file(filePath);
+        // }
+        // return new Response(file);
     }
+
+
+  async serveDirectoryIndex(dirPath: string, urlPath: string): Promise<Response> {
+    try {
+      const files = readdirSync(dirPath);
+      const items = files.map(file => {
+        const fullPath = join(dirPath, file);
+        const stat = statSync(fullPath);
+        const isDir = stat.isDirectory();
+        const size = stat.size;
+        const mtime = stat.mtime;
+
+        return {
+          name: file,
+          isDirectory: isDir,
+          size,
+          mtime
+        };
+      });
+
+      // Generate HTML for directory listing
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Index of ${urlPath}</title>
+            <style>
+              body { font-family: system-ui; padding: 2em; }
+              table { width: 100%; border-collapse: collapse; }
+              th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+              a { text-decoration: none; }
+              a:hover { text-decoration: underline; }
+            </style>
+          </head>
+          <body>
+            <h1>Index of ${urlPath}</h1>
+            <table>
+              <tr>
+                <th>Name</th>
+                <th>Size</th>
+                <th>Last Modified</th>
+              </tr>
+              ${items.map(item => `
+                <tr>
+                  <td>
+                    <a href="${join(urlPath, item.name)}${item.isDirectory ? '/' : ''}">
+                      ${item.name}${item.isDirectory ? '/' : ''}
+                    </a>
+                  </td>
+                  <td>${item.isDirectory ? '-' : formatSize(item.size)}</td>
+                  <td>${item.mtime.toUTCString()}</td>
+                </tr>
+              `).join('')}
+            </table>
+          </body>
+        </html>
+      `;
+
+      return new Response(html, {
+        headers: { "Content-Type": "text/html" }
+      });
+    } catch (err) {
+      return new Response("Error reading directory", { status: 500 });
+    }
+  }
 
     async start() {
         const server = Bun.serve({
@@ -179,6 +279,22 @@ class Hyperserve {
         console.log(`Listening on localhost:${server.port}`);
     }
 }
+
+
+// Utility function to format file sizes
+function formatSize(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = bytes;
+    let unitIndex = 0;
+
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+
+    return `${size.toFixed(1)} ${units[unitIndex]}`;
+  }
+
 
 const hyperserve = new Hyperserve(state);
 hyperserve.start();

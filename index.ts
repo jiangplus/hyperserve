@@ -141,7 +141,8 @@ class Hyperserve {
   userAgent: string;
 
   constructor(options: typeof state) {
-    this.port = options.port || process.env.PORT || process.env.NODE_PORT || "3000";
+    this.port =
+      options.port || process.env.PORT || process.env.NODE_PORT || "3000";
     this.baseDir = options.baseDir || ".";
     this.showDir = options.showDir || false;
     this.autoIndex = options.autoIndex || true;
@@ -159,13 +160,13 @@ class Hyperserve {
 
   async fetch(req: Request): Promise<Response> {
     if (this.username && this.password) {
-      const authHeader = req.headers.get('Authorization');
+      const authHeader = req.headers.get("Authorization");
       if (!authHeader || !this.isValidBasicAuth(authHeader)) {
-        return new Response('Unauthorized', {
+        return new Response("Unauthorized", {
           status: 401,
           headers: {
-            'WWW-Authenticate': 'Basic realm="Authentication required"'
-          }
+            "WWW-Authenticate": 'Basic realm="Authentication required"',
+          },
         });
       }
     }
@@ -222,7 +223,7 @@ class Hyperserve {
         try {
           return await this.handleProxy(req, this.proxy);
         } catch (proxyErr) {
-          console.error('Proxy request failed:', proxyErr);
+          console.error("Proxy request failed:", proxyErr);
           return new Response("Not Found", { status: 404 });
         }
       }
@@ -230,8 +231,7 @@ class Hyperserve {
     }
   }
 
-
-   async handleProxy(req: Request, target: string): Promise<Response> {
+  async handleProxy(req: Request, target: string): Promise<Response> {
     const url = new URL(req.url);
     const proxyUrl = new URL(url.pathname + url.search, target);
     console.log({ proxyUrl, target, url: url.pathname + url.search });
@@ -239,12 +239,12 @@ class Hyperserve {
 
     // Create new headers object to modify the host
     const headers = new Headers(req.headers);
-    headers.set('host', proxyUrl.host);
+    headers.set("host", proxyUrl.host);
 
     const proxyReq = new Request(proxyUrl, {
       method: req.method,
       headers: headers,
-      body: req.body
+      body: req.body,
     });
 
     try {
@@ -266,7 +266,7 @@ class Hyperserve {
       const files = readdirSync(dirPath);
       const items = files
         // Filter out dotfiles if noDotfiles option is set
-        .filter(file => !this.noDotfiles || !file.startsWith('.'))
+        .filter((file) => !this.noDotfiles || !file.startsWith("."))
         .map((file) => {
           const fullPath = join(dirPath, file);
           const stat = statSync(fullPath);
@@ -341,9 +341,9 @@ class Hyperserve {
   }
 
   private isValidBasicAuth(authHeader: string): boolean {
-    const base64Credentials = authHeader.split(' ')[1] || '';
+    const base64Credentials = authHeader.split(" ")[1] || "";
     const credentials = atob(base64Credentials);
-    const [username, password] = credentials.split(':');
+    const [username, password] = credentials.split(":");
 
     return username === this.username && password === this.password;
   }

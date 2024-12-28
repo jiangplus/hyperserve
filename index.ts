@@ -380,7 +380,7 @@ class Hyperserve {
   }
 
   async start() {
-    let hserver = this;
+    let self = this;
 
     // Add TLS configuration if enabled
     const serverOptions: Serve = {
@@ -414,7 +414,7 @@ class Hyperserve {
         open(ws: ServerWebSocket<WebSocketData>) {
           try {
             // Create WebSocket connection to target
-            const targetWs = new WebSocket(hserver.wsproxy + ws.data.pathname);
+            const targetWs = new WebSocket(self.wsproxy + ws.data.pathname);
             ws.data.targetWs = targetWs;
 
             // Forward target messages back to client
@@ -441,13 +441,13 @@ class Hyperserve {
       };
     }
 
-    this.theServer = Bun.serve(serverOptions);
+    let server = this.theServer = Bun.serve(serverOptions);
 
     if (this.wsproxy) {
-      console.log(`WebSocket proxy enabled to ${hserver.wsproxy}`);
+      console.log(`WebSocket proxy enabled to ${self.wsproxy}`);
     }
     console.log(
-      `Listening on ${this.tls ? "https" : "http"}://localhost:${hserver.theServer.port}`,
+      `Listening on ${this.tls ? "https" : "http"}://localhost:${server.port}`,
     );
   }
 

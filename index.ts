@@ -122,21 +122,63 @@ if (state.version) {
   process.exit(0);
 }
 
-const server = Bun.serve({
-    port: Number(state.port || 3000),
-    fetch(req: Request) {
+class Hyperserve {
+    port: string;
+    baseDir: string;
+    showDir: boolean;
+    autoIndex: boolean;
+    cors: boolean;
+    tls: boolean;
+    tlsCert: string;
+    tlsKey: string;
+    noDotfiles: boolean;
+    proxy: string;
+    username: string;
+    password: string;
+    logpath: string;
+    userAgent: string;
+
+    constructor(options: typeof state) {
+        this.port = options.port || '3000';
+        this.baseDir = options.baseDir || '.';
+        this.showDir = options.showDir || false;
+        this.autoIndex = options.autoIndex || true;
+        this.cors = options.cors || false;
+        this.tls = options.tls || false;
+        this.tlsCert = options.tlsCert || '';
+        this.tlsKey = options.tlsKey || '';
+        this.noDotfiles = options.noDotfiles || false;
+        this.proxy = options.proxy || '';
+        this.username = options.username || '';
+        this.password = options.password || '';
+        this.logpath = options.logpath || '';
+        this.userAgent = options.userAgent || '';
+    }
+
+    async fetch(req: Request) {
         const url = new URL(req.url);
         const pathname = url.pathname;
-        const baseDir = state.baseDir || '.';
+        const baseDir = this.baseDir;
+        console.log(pathname);
+        console.log(baseDir);
         const filePath = path.join(baseDir, pathname);
         let file;
-        if (filePath.endsWith('/') && state.autoIndex) {
+        if (filePath.endsWith('/') && this.autoIndex) {
             file = Bun.file(path.join(filePath, 'index.html'));
         } else {
             file = Bun.file(filePath);
         }
         return new Response(file);
-    },
-  });
+    }
 
-console.log(`Listening on localhost:${server.port}`);
+    async start() {
+        const server = Bun.serve({
+            port: Number(this.port),
+            fetch: this.fetch.bind(this),
+        });
+        console.log(`Listening on localhost:${server.port}`);
+    }
+}
+
+const hyperserve = new Hyperserve(state);
+hyperserve.start();

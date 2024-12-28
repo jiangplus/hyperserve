@@ -246,9 +246,14 @@ class Hyperserve {
       url: url.pathname + url.search,
     });
 
-    // Create new headers object to modify the host
+    // Create new headers object to modify the host and user agent
     const headers = new Headers(req.headers);
     headers.set("host", targetUrl.host);
+
+    // Set User-Agent if specified, or copy from original request if it's a curl request
+    if (this.userAgent) {
+      headers.set("user-agent", this.userAgent);
+    }
 
     const proxyReq = new Request(targetUrl, {
       method: req.method,

@@ -174,15 +174,28 @@ class Hyperserve {
   }
 
   async fetch(req: Request): Promise<Response> {
-    if (
-      this.wsproxy &&
-      req.headers.get("upgrade")?.toLowerCase() === "websocket"
-    ) {
+    if (this.cors) {
+      if (req.method === 'OPTIONS') {
+        return new Response(null, {
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '86400', // 24 hours
+          }
+        });
+      }
+    }
+
+    if (this.wsproxy && req.headers.get("upgrade")?.toLowerCase() === "websocket") {
       const url = new URL(req.url);
       const upgraded = this.theServer.upgrade(req, {
         data: { pathname: url.pathname },
       });
-      return upgraded;
+      if (!upgraded) {
+        return new Response('WebSocket upgrade failed', { status: 400 });
+      }
+      return new Response(null, { status: 101 });
     }
 
     if (this.username && this.password) {
@@ -210,50 +223,51 @@ class Hyperserve {
 
       if (stat.isDirectory()) {
         if (this.showDir) {
-          return this.serveDirectoryIndex(filePath, pathname);
+          let response = await this.serveDirectoryIndex(filePath, pathname);
+          return this.addCorsHeaders(response);
         } else if (this.autoIndex) {
           filePath = path.join(filePath, "index.html");
           if (statSync(filePath).isFile()) {
-            return new Response(Bun.file(filePath));
+            return this.addCorsHeaders(new Response(Bun.file(filePath)));
           } else if (this.proxy) {
-            return await this.handleProxy(req, this.proxy);
+            return this.addCorsHeaders(await this.handleProxy(req, this.proxy));
           } else {
-            return new Response("index.html not found", { status: 404 });
+            return this.addCorsHeaders(new Response("index.html not found", { status: 404 }));
           }
         } else {
-          return new Response("Directory listing not allowed", { status: 403 });
+          return this.addCorsHeaders(new Response("Directory listing not allowed", { status: 403 }));
         }
       }
 
       if (stat.isFile()) {
         const file = Bun.file(filePath);
         const mimeType = file.type || "application/octet-stream";
-        return new Response(file, {
+        return this.addCorsHeaders(new Response(file, {
           headers: {
             "Content-Type": mimeType,
             "Content-Length": String(stat.size),
             "Last-Modified": stat.mtime.toUTCString(),
           },
-        });
+        }));
       }
 
       // If we get here, try proxy if enabled
       if (this.proxy) {
-        return await this.handleProxy(req, this.proxy);
+        return this.addCorsHeaders(await this.handleProxy(req, this.proxy));
       }
 
-      return new Response("Not Found", { status: 404 });
+      return this.addCorsHeaders(new Response("Not Found", { status: 404 }));
     } catch (err) {
       // File not found or access denied, try proxy if enabled
       if (this.proxy) {
         try {
-          return await this.handleProxy(req, this.proxy);
+          return this.addCorsHeaders(await this.handleProxy(req, this.proxy));
         } catch (proxyErr) {
           console.error("Proxy request failed:", proxyErr);
-          return new Response("Not Found", { status: 404 });
+          return this.addCorsHeaders(new Response("Not Found", { status: 404 }));
         }
       }
-      return new Response("Not Found", { status: 404 });
+      return this.addCorsHeaders(new Response("Not Found", { status: 404 }));
     }
   }
 
@@ -454,6 +468,21 @@ class Hyperserve {
     const [username, password] = credentials.split(":");
 
     return username === this.username && password === this.password;
+  }
+
+  private addCorsHeaders(response: Response): Response {
+    if (!this.cors) return response;
+
+    const headers = new Headers(response.headers);
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers
+    });
   }
 }
 
